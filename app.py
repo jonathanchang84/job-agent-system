@@ -19,14 +19,14 @@ def fetch_tracked_jobs():
         response = supabase.table("job_tracker").select("*").execute()
         return pd.DataFrame(response.data) if response.data else pd.DataFrame()
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Database Error: {e}")
         return pd.DataFrame()
 
 st.title("💼 Executive Job Agent Pipeline")
 df = fetch_tracked_jobs()
 
 if df.empty:
-    st.info("No jobs found. Run `python3 search_engine.py` to find leads and `python3 agent_tailor.py` to tailor them.")
+    st.info("No jobs found. Run `python3 search_engine.py` and `python3 agent_tailor.py`.")
 else:
     # Sidebar Filters
     status_filter = st.sidebar.selectbox("Filter by Status", ["All"] + sorted(df["status"].unique().tolist()))
@@ -38,23 +38,28 @@ else:
 
     with col_left:
         st.subheader("Job Opportunities")
-        event = st.dataframe(
+        # Use data_editor for stable, cross-version row selection
+        edited_df = st.data_editor(
             df[["id", "company_name", "role_title", "status"]],
             use_container_width=True,
             hide_index=True,
-            on_select="rerun",
-            selection_mode="single"
+            key="job_selector",
+            disabled=["id", "company_name", "role_title", "status"]
         )
 
     with col_right:
         st.subheader("AI Asset Inspector")
-        selected_rows = event.get("selection", {}).get("rows", [])
+        # Logic to detect selection from the data_editor
+        selection = st.session_state.get("job_selector", {})
+        selected_rows = selection.get("selection", {}).get("rows", [])
         
         if selected_rows:
-            job = df.iloc[selected_rows[0]]
+            # Get data for the selected row
+            idx = selected_rows[0]
+            job = df.iloc[idx]
+            
             st.markdown(f"### {job['role_title']} at {job['company_name']}")
             
-            # Use tabs for clean organization
             tab1, tab2, tab3 = st.tabs(["📄 Augmented CV", "✉️ Cover Letter", "🔗 Pitch"])
             
             with tab1:
