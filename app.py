@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 
-# Force-reload environment variables
+# Force-reload environment variables locally
 load_dotenv(override=True)
 
 # Page Configuration
@@ -16,11 +16,15 @@ st.set_page_config(
 )
 
 # Initialize Supabase Client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# (Checks local environment first via os.getenv, then falls back to Streamlit Secrets on the Cloud)
+SUPABASE_URL = os.getenv("SUPABASE_URL") or (st.secrets.get("SUPABASE_URL") if "SUPABASE_URL" in st.secrets else None)
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or (st.secrets.get("SUPABASE_KEY") if "SUPABASE_KEY" in st.secrets else None)
 
 @st.cache_resource
 def init_supabase():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        st.error("Missing Supabase credentials. Check your local .env file or Streamlit Cloud Secrets.")
+        return None
     try:
         return create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
@@ -96,7 +100,7 @@ else:
     # --- Main Data View ---
     st.subheader("Discovered Leads")
     
-    # Clean up dataframe view for presentation and include the new 'source' column
+    # Clean up dataframe view for presentation and include the 'source' column
     display_cols = ["id", "company_name", "role_title", "source", "status", "job_url"]
     actual_cols = [col for col in display_cols if col in df.columns]
     
@@ -109,6 +113,6 @@ else:
             "source": "Source Platform",
             "status": "Status"
         },
-        width="stretch",
+        use_container_width=True,
         hide_index=True
     )
