@@ -9,6 +9,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Initialize the client clearly
 ai_client = genai.Client(api_key=API_KEY)
 
 def run_pipeline():
@@ -23,9 +24,9 @@ def run_pipeline():
     # Build Prompt
     prompt = f"CV: {master_cv}\n\nJobs: {json.dumps(jobs)}\n\nReturn JSON map of id: {{augmented_cv, cover_letter, pitch}}."
     
-    # Use 'gemini-1.5-flash' alias which is widely supported
+    # Use the explicit 'models/' prefix which is often required for the v1beta API
     response = ai_client.models.generate_content(
-        model='gemini-1.5-flash', 
+        model='models/gemini-1.5-flash', 
         contents=prompt
     )
     

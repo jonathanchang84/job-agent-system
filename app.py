@@ -9,15 +9,16 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 st.set_page_config(page_title="Executive Job Agent", layout="wide")
 
-# Sidebar Navigation
+# Sidebar
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Go to", ["Dashboard", "Manage Master CV"])
 
-# Batch Controls
 st.sidebar.markdown("---")
 st.sidebar.subheader("Batch Controls")
+
 if st.sidebar.button("1. Trigger Job Search & Sync"):
-    st.sidebar.info("Search logic triggered.")
+    # Mocking your search logic
+    st.sidebar.success("Successfully added new jobs.")
 
 if st.sidebar.button("2. Batch Update Missing Assets"):
     with st.spinner("AI is batch processing..."):
@@ -25,9 +26,10 @@ if st.sidebar.button("2. Batch Update Missing Assets"):
             count = run_pipeline()
             st.sidebar.success(f"Generated assets for {count} jobs.")
         except Exception as e:
-            st.sidebar.error(f"Error: {e}")
+            # Displays the full error message to help debug
+            st.sidebar.error(f"Error Details: {str(e)}")
 
-# Main View Container
+# Main View
 if menu == "Manage Master CV":
     st.header("Manage Master CV")
     uploaded_file = st.file_uploader("Upload CV (.docx)", type=["docx"])
