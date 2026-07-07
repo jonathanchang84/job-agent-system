@@ -21,28 +21,24 @@ supabase = init_supabase()
 st.title("🚀 Job Application Agent")
 
 # ==========================================
-# SIDEBAR CONTROLS: SEPARATED WORKFLOW
+# SIDEBAR CONTROLS & CV STATE VISUALIZATION
 # ==========================================
 st.sidebar.header("Automation Engine")
 
-# Button 1: Deep Scrape ONLY (No Gemini Asset Calls)
 if st.sidebar.button("🔍 1. Scrape & Auto-Pull Full Specs"):
-    with st.spinner("Scraping listings & fetching complete job specs..."):
+    with st.spinner("Scraping listings..."):
         try:
             queries = engine.generate_search_queries()
-            # This calls the updated jobspy method with description fetching active!
             raw_df = engine.execute_uk_job_search(queries)
-            
             if not raw_df.empty:
                 engine.save_matches_to_supabase(raw_df)
-                st.sidebar.success(f"Successfully pulled {len(raw_df)} jobs with full specs!")
+                st.sidebar.success(f"Pulled {len(raw_df)} jobs!")
             else:
-                st.sidebar.warning("No new matching jobs found.")
+                st.sidebar.warning("No new jobs found.")
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Scraper error: {e}")
 
-# Button 2: Manual AI Batch Processing (Run on your own terms)
 if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
     with st.spinner("AI is optimizing CVs and Cover Letters..."):
         try:
@@ -54,6 +50,19 @@ if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
 
 st.sidebar.markdown("---")
 st.sidebar.header("Profile Administration")
+
+# LIVE FEEDBACK: Fetch and verify current active database Master CV text
+try:
+    cv_check = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
+    has_cv = len(cv_check.data[0]["master_cv_text"].strip()) > 0 if cv_check.data else False
+except Exception:
+    has_cv = False
+
+if has_cv:
+    st.sidebar.success("✅ Active Master CV Linked in Database")
+else:
+    st.sidebar.warning("⚠️ No Active Master CV Found in Database")
+
 uploaded_file = st.sidebar.file_uploader("Upload Master CV (.docx)", type=["docx"])
 if uploaded_file and st.sidebar.button("💾 Push Master CV"):
     with open("temp_master_cv.docx", "wb") as f:
@@ -96,9 +105,8 @@ if not df.empty:
         
         with left_col:
             st.markdown("### 📝 Target Job Description Spec")
-            # Editable just in case, but will now load scraped data by default
             updated_desc = st.text_area(
-                "Scraped Job Spec Context", 
+                "Scraped Job Spec Context (Feel free to paste text here if empty)", 
                 value=job.get('job_description') or '', 
                 height=350
             )
@@ -116,12 +124,12 @@ if not df.empty:
                 if job.get('tailored_cv'):
                     st.text_area("Your Tailored Target CV Content", value=job.get('tailored_cv'), height=300)
                 else:
-                    st.warning("No CV built yet. Make sure a job description spec is saved on the left, then hit button 2.")
+                    st.warning("No CV built yet. Hit button 2 on the left sidebar to generate.")
                     
             with cl_tab:
                 if job.get('tailored_cover_letter'):
                     st.text_area("Your Tailored Cover Letter Content", value=job.get('tailored_cover_letter'), height=300)
                 else:
-                    st.warning("No Cover Letter built yet. Make sure a job description spec is saved on the left, then hit button 2.")
+                    st.warning("No Cover Letter built yet. Hit button 2 on the left sidebar to generate.")
 else:
     st.info("Your pipeline data core is currently empty.")

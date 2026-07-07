@@ -26,7 +26,6 @@ def generate_asset_with_retry(prompt, max_retries=3):
     raise Exception("❌ Failed to generate assets after maximum retries.")
 
 def run_pipeline():
-    # Fetch entries where EITHER the tailored CV or Cover Letter hasn't been built yet
     response = supabase.table("job_tracker").select("*").execute()
     jobs = response.data if response.data else []
     
@@ -34,50 +33,56 @@ def run_pipeline():
     master_cv = profile_resp.data[0]['master_cv_text'] if profile_resp.data else ""
 
     if not master_cv:
+        print("❌ No Master CV found in database.")
         return 0
 
     success_count = 0
     for job in jobs:
-        # Only process if missing tailored assets
+        # If assets are already built, don't waste API calls
         if job.get('tailored_cv') and job.get('tailored_cover_letter'):
             continue
             
+        role_title = job.get('role_title') or job.get('job_title') or 'Executive Position'
+        company = job.get('company_name') or 'Target Enterprise'
         raw_desc = job.get('job_description', '')
-        if not raw_desc or len(raw_desc.strip()) < 10:
-            continue # Skip jobs that don't have a spec pasted or scraped yet
 
-        role_title = job.get('role_title') or job.get('job_title') or 'Product Position'
-        company = job.get('company_name') or 'Target Company'
+        # FALLBACK: If description is missing, synthesize an intelligent target framework
+        if not raw_desc or len(str(raw_desc).strip()) < 10:
+            context_spec = f"Targeting the core executive standards, leadership metrics, KPIs, and strategy expected of a {role_title} operating within {company}."
+            status_update = "Tailored (Title Only)"
+        else:
+            context_spec = raw_desc
+            status_update = "Ready to Apply"
 
-        # 1. GENERATE TAILORED CV
+        # 1. TAILORED CV PROMPT
         cv_prompt = f"""
-        You are an elite executive career coach. Tailor the following Master CV text perfectly to match the provided job description.
-        Emphasize leadership metrics, cross-functional execution, and exact technical mapping.
+        You are an elite executive career coach. Tailor the following Master CV text perfectly to match the target position.
+        Emphasize leadership metrics, cross-functional execution, and direct capability mapping.
         
         [Target Role]: {role_title} at {company}
-        [Job Description Spec]: {raw_desc}
+        [Context/Spec]: {context_spec}
         [Master CV Profile]: {master_cv}
         """
         
-        # 2. GENERATE TAILORED COVER LETTER
+        # 2. COVER LETTER PROMPT
         cl_prompt = f"""
-        Write a compelling, high-impact executive Cover Letter matching this candidate's Master CV to the provided job description.
+        Write a compelling, high-impact executive Cover Letter matching this candidate's Master CV to the target position.
         Keep it to one page, outcome-focused, and address it to the hiring team at {company}.
         
         [Target Role]: {role_title} at {company}
-        [Job Description Spec]: {raw_desc}
+        [Context/Spec]: {context_spec}
         [Master CV Profile]: {master_cv}
         """
         
         try:
             tailored_cv = generate_asset_with_retry(cv_prompt)
-            time.sleep(1.0) # Rate limit padding
+            time.sleep(1.0) # Rate limiter buffer
             tailored_cl = generate_asset_with_retry(cl_prompt)
             
             supabase.table("job_tracker").update({
                 "tailored_cv": tailored_cv,
                 "tailored_cover_letter": tailored_cl,
-                "status": "Ready to Apply"
+                "status": status_update
             }).eq("id", job["id"]).execute()
             
             success_count += 1
