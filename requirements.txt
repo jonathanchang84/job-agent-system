@@ -1,0 +1,5 @@
+python-dotenv
+pandas
+supabase
+google-genai
+jobspy
