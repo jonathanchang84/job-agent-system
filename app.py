@@ -1,42 +1,17 @@
 import streamlit as st
 import pandas as pd
-import os
-from run_full_pipeline import run_pipeline
-from cv_manager import read_docx
-from supabase import create_client
+from docx import Document
+from io import BytesIO
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+# Helper to create a docx in memory
+def create_docx(text):
+    doc = Document()
+    doc.add_paragraph(text)
+    bio = BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
 
-st.set_page_config(page_title="Executive Job Agent", layout="wide")
-
-st.sidebar.title("Navigation")
-menu = st.sidebar.radio("Go to", ["Dashboard", "Manage Master CV"])
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Batch Controls")
-
-if st.sidebar.button("1. Trigger Job Search & Sync"):
-    st.sidebar.info("Search triggered.")
-
-if st.sidebar.button("2. Batch Update Missing Assets"):
-    with st.spinner("AI is batch processing..."):
-        try:
-            count = run_pipeline()
-            st.sidebar.success(f"Generated assets for {count} jobs.")
-        except Exception as e:
-            if "429" in str(e):
-                st.sidebar.warning("Quota exhausted. Please enable billing in Google AI Studio.")
-            else:
-                st.sidebar.error(f"Error: {e}")
-
-if menu == "Manage Master CV":
-    st.header("Manage Master CV")
-    uploaded_file = st.file_uploader("Upload CV (.docx)", type=["docx"])
-    if uploaded_file and st.button("Save to Database"):
-        cv_text = read_docx(uploaded_file)
-        supabase.table("user_profile").upsert({"id": 1, "master_cv_text": cv_text}).execute()
-        st.success("CV Saved!")
-
+# ... inside your app.py ...
 elif menu == "Dashboard":
     st.title("💼 Executive Pipeline")
     data = supabase.table("job_tracker").select("*").execute().data
@@ -46,5 +21,31 @@ elif menu == "Dashboard":
         event = st.dataframe(df, selection_mode="single-row", on_select="rerun", key="job_table")
         if event.selection.rows:
             job = df.iloc[event.selection.rows[0]]
-            st.write(f"### {job['role_title']} at {job['company_name']}")
-            st.text_area("Cover Letter", job.get('tailored_cover_letter', ''))
+            job_name = f"{job['role_title']} at {job['company_name']}"
+            
+            st.write(f"### {job_name}")
+            
+            # Create two columns for the assets
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Tailored CV")
+                cv_text = job.get('augmented_cv_text', '')
+                st.text_area("CV Preview", cv_text, height=300)
+                st.download_button(
+                    label="Download CV",
+                    data=create_docx(cv_text),
+                    file_name=f"Jonathan Chang CV - {job['company_name']}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+                
+            with col2:
+                st.subheader("Cover Letter")
+                cl_text = job.get('tailored_cover_letter', '')
+                st.text_area("CL Preview", cl_text, height=300)
+                st.download_button(
+                    label="Download Cover Letter",
+                    data=create_docx(cl_text),
+                    file_name=f"Jonathan Chang Covering Letter - {job['company_name']}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
