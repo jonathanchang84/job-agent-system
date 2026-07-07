@@ -5,23 +5,14 @@ from google import genai
 from jobspy import scrape_jobs
 from supabase import create_client
 
-# Safely look for dotenv if it's there; if not, ignore it on Streamlit Cloud
-try:
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-except ImportError:
-    pass
-
-# Client Configurations (Pulls directly from Streamlit Secrets or Environment)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Initialize Gemini client safely
 if GEMINI_API_KEY:
     ai_client = genai.Client(api_key=GEMINI_API_KEY)
 else:
-    ai_client = genai.Client()  # Falls back to standard client routing
+    ai_client = genai.Client()
 
 try:
     if SUPABASE_URL and SUPABASE_KEY:
@@ -31,37 +22,38 @@ try:
 except Exception:
     supabase = None
 
-CV_PROFILE = """
-Jonathan Chang - Dartford, UK
-Director - Crew Product Lead (Real Estate Finance) at UBS.
-Expertise: 10+ years in financial services, Product Strategy, AI/ML integrations, 
-Warehouse Lending, Securities, Mortgages, Core Banking, Agile Transformation.
-"""
-
 def generate_search_queries():
+    try:
+        profile_resp = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
+        cv_context = profile_resp.data[0]["master_cv_text"] if profile_resp.data else "Executive Product Leader"
+    except Exception:
+        cv_context = "Executive Product Leader"
+
     prompt = f"""
-    Based on this executive candidate summary: {CV_PROFILE}
-    Identify the top 3 most relevant, high-paying job title strings to search for on UK job boards.
-    Return ONLY a JSON array of strings. Do not include markdown formatting or backticks.
+    Based on this candidate background: {cv_context[:1000]}
+    Identify the top 3 most relevant high-level job search strings for UK job boards (e.g., 'Director of Product').
+    Return ONLY a raw JSON array of strings. Do not include markdown or backticks.
     """
     try:
         response = ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
     except Exception:
-        return ["Director of Product", "Head of Product", "Product Lead"]
+        return ["Director of Product", "Head of Product"]
 
 def execute_uk_job_search(queries):
     all_results = []
     for query in queries:
         try:
+            # CRITICAL: Added linkedin_fetch_description=True to automate full description gathering
             jobs = scrape_jobs(
                 site_name=["linkedin", "indeed", "zip_recruiter"],
                 search_term=query,
                 location="United Kingdom",
-                results_per_site=10,
-                hours_old=48, 
-                country_inference="uk"
+                results_per_site=5,
+                hours_old=72, 
+                country_inference="uk",
+                linkedin_fetch_description=True  # Force fetching full descriptions automatically
             )
             if not jobs.empty:
                 all_results.append(jobs)
@@ -73,7 +65,7 @@ def execute_uk_job_search(queries):
     return pd.DataFrame()
 
 def save_matches_to_supabase(df):
-    if not supabase:
+    if not supabase or df.empty:
         return
     for _, row in df.iterrows():
         url = row.get('job_url') or row.get('url')
@@ -82,13 +74,14 @@ def save_matches_to_supabase(df):
         try:
             duplicate_check = supabase.table("job_tracker").select("id").eq("job_url", url).execute()
             if not duplicate_check.data:
+                # Store the full scraped description directly
                 payload = {
                     "company_name": row.get('company', 'Unknown Enterprise'),
                     "role_title": row.get('title', 'Product Position'),
                     "job_url": url,
                     "status": "Discovered",
                     "source": row.get('source_platform', 'LINKEDIN'),
-                    "job_description": row.get('description', '')
+                    "job_description": row.get('description', '') 
                 }
                 supabase.table("job_tracker").insert(payload).execute()
         except Exception:
