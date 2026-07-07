@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 
-# Force-load configuration
 load_dotenv(override=True)
 
 st.set_page_config(page_title="Executive Job Agent", page_icon="💼", layout="wide")
@@ -26,9 +25,9 @@ st.title("💼 Executive Job Agent Pipeline")
 df = fetch_tracked_jobs()
 
 if df.empty:
-    st.info("No jobs found. Run `python3 search_engine.py` and `python3 agent_tailor.py`.")
+    st.info("No jobs found. Run your search and tailoring scripts.")
 else:
-    # Sidebar Filters
+    # Sidebar
     status_filter = st.sidebar.selectbox("Filter by Status", ["All"] + sorted(df["status"].unique().tolist()))
     if status_filter != "All":
         df = df[df["status"] == status_filter]
@@ -38,39 +37,42 @@ else:
 
     with col_left:
         st.subheader("Job Opportunities")
-        # Use data_editor for stable, cross-version row selection
-        edited_df = st.data_editor(
-            df[["id", "company_name", "role_title", "status"]],
+        # Standard dataframe with selection
+        event = st.dataframe(
+            df[["id", "company_name", "role_title", "source", "status"]],
             use_container_width=True,
             hide_index=True,
-            key="job_selector",
-            disabled=["id", "company_name", "role_title", "status"]
+            selection_mode="single-row",
+            on_select="rerun"
         )
 
     with col_right:
         st.subheader("AI Asset Inspector")
-        # Logic to detect selection from the data_editor
-        selection = st.session_state.get("job_selector", {})
-        selected_rows = selection.get("selection", {}).get("rows", [])
+        # Corrected selection logic
+        selected_rows = event.selection.rows
         
         if selected_rows:
-            # Get data for the selected row
             idx = selected_rows[0]
             job = df.iloc[idx]
             
-            st.markdown(f"### {job['role_title']} at {job['company_name']}")
+            st.markdown(f"### {job['role_title']}")
+            st.markdown(f"**Company:** {job['company_name']} | **Source:** {job['source']}")
             
+            if job.get('job_url'):
+                st.link_button("Open Original Job Link ↗", job['job_url'])
+            
+            # Asset Tabs
             tab1, tab2, tab3 = st.tabs(["📄 Augmented CV", "✉️ Cover Letter", "🔗 Pitch"])
             
             with tab1:
-                st.text_area("Optimized Resume", job.get("augmented_cv_text", "No CV data yet"), height=300)
+                st.text_area("Optimized Resume", job.get("augmented_cv_text", "Not yet tailored."), height=300)
             with tab2:
-                st.text_area("Cover Letter", job.get("tailored_cover_letter", "No letter generated"), height=300)
+                st.text_area("Cover Letter", job.get("tailored_cover_letter", "Not yet tailored."), height=300)
             with tab3:
-                st.text_area("Outreach Pitch", job.get("tailored_pitch", "No pitch generated"), height=150)
+                st.text_area("Outreach Pitch", job.get("tailored_pitch", "Not yet tailored."), height=150)
             
             if st.button("Mark as Applied ✅"):
                 supabase.table("job_tracker").update({"status": "Applied"}).eq("id", int(job['id'])).execute()
                 st.rerun()
         else:
-            st.info("Select a row in the table to view the AI-tailored assets.")
+            st.warning("Select a row in the table to view the AI-tailored assets.")
