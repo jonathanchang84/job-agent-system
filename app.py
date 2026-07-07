@@ -12,7 +12,7 @@ st.set_page_config(page_title="Job Application Agent", layout="wide")
 @st.cache_resource
 def init_supabase():
     url = os.getenv("SUPABASE_URL")
-    key = os-getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_KEY")  # Fixed syntax typo here (changed hyphen to dot)
     if not url or not key:
         st.error("Missing Supabase credentials in environment variables.")
         return None
@@ -70,10 +70,10 @@ if not df.empty:
         
         col1, col2 = st.columns(2)
         with col1:
-            st.write(**Role:** {job.get('job_title', 'N/A')})
-            st.write(**Status:** {job.get('status', 'N/A')})
+            st.write(f"**Role:** {job.get('job_title', 'N/A')}")      # Fixed SyntaxError here
+            st.write(f"**Status:** {job.get('status', 'N/A')}")    # Fixed SyntaxError here
         with col2:
-            st.write(**Applied Date:** {job.get('applied_date', 'N/A')})
+            st.write(f"**Applied Date:** {job.get('applied_date', 'N/A')}")  # Fixed SyntaxError here
             
         # TODO: Insert your CV/Cover Letter Display and Download logic here
         
