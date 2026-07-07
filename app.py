@@ -2,31 +2,36 @@ import streamlit as st
 import pandas as pd
 from run_full_pipeline import run_pipeline
 from cv_manager import read_docx
-# ... keep your other imports
+# ... other imports
 
 st.set_page_config(page_title="Executive Job Agent", layout="wide")
 
-# 1. Sidebar Navigation
+# Sidebar
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Go to", ["Dashboard", "Manage Master CV"])
 
-# 2. Sidebar Batch Controls (Always visible in sidebar)
+# --- Batch Controls ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("Batch Controls")
 if st.sidebar.button("1. Trigger Job Search & Sync"):
-    # Call your search logic here
-    st.sidebar.success("Search triggered.")
+    with st.spinner("Searching for new leads..."):
+        # Replace this with your actual function call, e.g., count = search_engine.run()
+        count = 5 # Example: replace with dynamic return
+        st.sidebar.success(f"Successfully added {count} new jobs.")
 
 if st.sidebar.button("2. Batch Update Missing Assets"):
     with st.spinner("AI is batch processing..."):
         run_pipeline()
-        st.sidebar.success("Assets generated.")
+        st.sidebar.success("Assets generated for all pending jobs.")
 
-# 3. Main View Router
+# --- Main View Container ---
+main_container = st.container()
+
 if menu == "Manage Master CV":
-    st.header("Manage Master CV")
-    # ... your existing upload code ...
-
+    with main_container:
+        st.header("Manage Master CV")
+        # ... (keep existing uploader code)
 elif menu == "Dashboard":
-    st.title("💼 Executive Pipeline")
-    # ... your existing table view and inspector code ...
+    with main_container:
+        st.title("💼 Executive Pipeline")
+        # ... (keep existing table and inspector code)
