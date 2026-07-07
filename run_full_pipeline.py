@@ -27,7 +27,6 @@ def generate_asset_with_retry(prompt, max_retries=3):
     raise Exception("❌ Gemini API Limit Reached.")
 
 def run_pipeline():
-    # Fetch all tracked jobs
     response = supabase.table("job_tracker").select("*").execute()
     jobs = response.data if response.data else []
     
@@ -40,7 +39,6 @@ def run_pipeline():
 
     success_count = 0
     for job in jobs:
-        # FORCE UPDATE: If it has a job description, we force it to generate no matter what
         raw_desc = job.get('job_description', '')
         if not raw_desc or len(str(raw_desc).strip()) < 10:
             continue
@@ -80,9 +78,8 @@ def run_pipeline():
             success_count += 1
             time.sleep(1.0)
         except Exception as e:
-            # If an error happens, visually surface it on screen instead of hiding it!
             st.error(f"Error compiling assets for {company}: {e}")
-            time.sleep(5.0)
+            time.sleep(2.0)
             continue
 
     return success_count

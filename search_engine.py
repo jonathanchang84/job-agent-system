@@ -45,7 +45,6 @@ def execute_uk_job_search(queries):
     all_results = []
     for query in queries:
         try:
-            # CRITICAL: Added linkedin_fetch_description=True to automate full description gathering
             jobs = scrape_jobs(
                 site_name=["linkedin", "indeed", "zip_recruiter"],
                 search_term=query,
@@ -53,7 +52,7 @@ def execute_uk_job_search(queries):
                 results_per_site=5,
                 hours_old=72, 
                 country_inference="uk",
-                linkedin_fetch_description=True  # Force fetching full descriptions automatically
+                linkedin_fetch_description=True
             )
             if not jobs.empty:
                 all_results.append(jobs)
@@ -74,7 +73,6 @@ def save_matches_to_supabase(df):
         try:
             duplicate_check = supabase.table("job_tracker").select("id").eq("job_url", url).execute()
             if not duplicate_check.data:
-                # Store the full scraped description directly
                 payload = {
                     "company_name": row.get('company', 'Unknown Enterprise'),
                     "role_title": row.get('title', 'Product Position'),

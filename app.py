@@ -3,8 +3,7 @@ import pandas as pd
 import os
 from supabase import create_client
 from cv_manager import read_docx
-from run_full_pipeline import run_pipeline
-import search_engine as engine
+from run_full_pipeline import run_pipeline, generate_asset_with_retry
 
 st.set_page_config(page_title="Job Application Agent", layout="wide", page_icon="🚀")
 
@@ -21,11 +20,12 @@ supabase = init_supabase()
 st.title("🚀 Job Application Agent")
 
 # ==========================================
-# SIDEBAR CONTROLS & CV STATE VISUALIZATION
+# SIDEBAR CONTROLS
 # ==========================================
 st.sidebar.header("Automation Engine")
 
 if st.sidebar.button("🔍 1. Scrape & Auto-Pull Full Specs"):
+    import search_engine as engine
     with st.spinner("Scraping listings..."):
         try:
             queries = engine.generate_search_queries()
@@ -39,8 +39,8 @@ if st.sidebar.button("🔍 1. Scrape & Auto-Pull Full Specs"):
         except Exception as e:
             st.sidebar.error(f"Scraper error: {e}")
 
-if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
-    with st.spinner("AI is optimizing CVs and Cover Letters..."):
+if st.sidebar.button("🤖 2. Batch Process All Missing"):
+    with st.spinner("AI processing all incomplete entries..."):
         try:
             count = run_pipeline()
             st.sidebar.success(f"Optimized assets for {count} positions!")
@@ -51,7 +51,6 @@ if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
 st.sidebar.markdown("---")
 st.sidebar.header("Profile Administration")
 
-# LIVE FEEDBACK: Fetch and verify current active database Master CV text
 try:
     cv_check = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
     has_cv = len(cv_check.data[0]["master_cv_text"].strip()) > 0 if cv_check.data else False
@@ -60,8 +59,10 @@ except Exception:
 
 if has_cv:
     st.sidebar.success("✅ Active Master CV Linked in Database")
+    master_cv_text = cv_check.data[0]["master_cv_text"]
 else:
     st.sidebar.warning("⚠️ No Active Master CV Found in Database")
+    master_cv_text = ""
 
 uploaded_file = st.sidebar.file_uploader("Upload Master CV (.docx)", type=["docx"])
 if uploaded_file and st.sidebar.button("💾 Push Master CV"):
@@ -105,16 +106,41 @@ if not df.empty:
         
         with left_col:
             st.markdown("### 📝 Target Job Description Spec")
-            updated_desc = st.text_area(
-                "Scraped Job Spec Context (Feel free to paste text here if empty)", 
+            current_text_box_value = st.text_area(
+                "Scraped Job Spec Context", 
                 value=job.get('job_description') or '', 
-                height=350
+                height=350,
+                key=f"desc_{job['id']}"
             )
-            if updated_desc != job.get('job_description'):
-                if st.button("💾 Save Pasted Job Spec"):
-                    supabase.table("job_tracker").update({"job_description": updated_desc}).eq("id", job["id"]).execute()
-                    st.success("Spec saved manually!")
-                    st.rerun()
+            
+            if st.button("✨ Force Tailor This Selected Job Right Now", type="primary"):
+                if not master_cv_text:
+                    st.error("Cannot run optimization: Master CV is missing.")
+                elif not current_text_box_value.strip():
+                    st.error("Please ensure you paste or save a job description spec on the left before tailoring.")
+                else:
+                    with st.spinner("Talking directly to Gemini for this specific job..."):
+                        try:
+                            role_title = job.get('role_title') or 'Executive Position'
+                            company = job.get('company_name') or 'Target Enterprise'
+                            
+                            cv_prompt = f"Tailor this Master CV to match this job context perfectly. Optimize for maximum leadership and technical competency mapping:\n\n[Role]: {role_title} at {company}\n[Spec]: {current_text_box_value}\n[CV Framework]: {master_cv_text}"
+                            cl_prompt = f"Write a high-impact outcome-focused executive cover letter tailored matching this job spec. Max 1 page:\n\n[Role]: {role_title} at {company}\n[Spec]: {current_text_box_value}\n[CV Framework]: {master_cv_text}"
+                            
+                            new_cv = generate_asset_with_retry(cv_prompt)
+                            new_cl = generate_asset_with_retry(cl_prompt)
+                            
+                            supabase.table("job_tracker").update({
+                                "job_description": current_text_box_value,
+                                "tailored_cv": new_cv,
+                                "tailored_cover_letter": new_cl,
+                                "status": "Ready to Apply"
+                            }).eq("id", job["id"]).execute()
+                            
+                            st.success("Assets built and saved perfectly!")
+                            st.rerun()
+                        except Exception as err:
+                            st.error(f"Direct compilation error: {err}")
                     
         with right_col:
             st.markdown("### ✨ AI Generation Output")
@@ -124,12 +150,12 @@ if not df.empty:
                 if job.get('tailored_cv'):
                     st.text_area("Your Tailored Target CV Content", value=job.get('tailored_cv'), height=300)
                 else:
-                    st.warning("No CV built yet. Hit button 2 on the left sidebar to generate.")
+                    st.warning("No CV built yet. Hit 'Force Tailor This Selected Job Right Now' below the spec window to generate.")
                     
             with cl_tab:
                 if job.get('tailored_cover_letter'):
                     st.text_area("Your Tailored Cover Letter Content", value=job.get('tailored_cover_letter'), height=300)
                 else:
-                    st.warning("No Cover Letter built yet. Hit button 2 on the left sidebar to generate.")
+                    st.warning("No Cover Letter built yet. Hit 'Force Tailor This Selected Job Right Now' below the spec window to generate.")
 else:
     st.info("Your pipeline data core is currently empty.")
