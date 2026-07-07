@@ -1,9 +1,16 @@
 import streamlit as st
 import pandas as pd
+import os
 from docx import Document
 from io import BytesIO
+from run_full_pipeline import run_pipeline
+from cv_manager import read_docx
+from supabase import create_client
 
-# Helper to create a docx in memory
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+
+st.set_page_config(page_title="Executive Job Agent", layout="wide")
+
 def create_docx(text):
     doc = Document()
     doc.add_paragraph(text)
@@ -11,7 +18,17 @@ def create_docx(text):
     doc.save(bio)
     return bio.getvalue()
 
-# ... inside your app.py ...
+st.sidebar.title("Navigation")
+menu = st.sidebar.radio("Go to", ["Dashboard", "Manage Master CV"])
+
+if menu == "Manage Master CV":
+    st.header("Manage Master CV")
+    uploaded_file = st.file_uploader("Upload CV (.docx)", type=["docx"])
+    if uploaded_file and st.button("Save to Database"):
+        cv_text = read_docx(uploaded_file)
+        supabase.table("user_profile").upsert({"id": 1, "master_cv_text": cv_text}).execute()
+        st.success("CV Saved!")
+
 elif menu == "Dashboard":
     st.title("💼 Executive Pipeline")
     data = supabase.table("job_tracker").select("*").execute().data
@@ -21,31 +38,16 @@ elif menu == "Dashboard":
         event = st.dataframe(df, selection_mode="single-row", on_select="rerun", key="job_table")
         if event.selection.rows:
             job = df.iloc[event.selection.rows[0]]
-            job_name = f"{job['role_title']} at {job['company_name']}"
+            st.write(f"### {job['role_title']} at {job['company_name']}")
             
-            st.write(f"### {job_name}")
-            
-            # Create two columns for the assets
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Tailored CV")
-                cv_text = job.get('augmented_cv_text', '')
-                st.text_area("CV Preview", cv_text, height=300)
-                st.download_button(
-                    label="Download CV",
-                    data=create_docx(cv_text),
-                    file_name=f"Jonathan Chang CV - {job['company_name']}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-                
-            with col2:
-                st.subheader("Cover Letter")
-                cl_text = job.get('tailored_cover_letter', '')
-                st.text_area("CL Preview", cl_text, height=300)
-                st.download_button(
-                    label="Download Cover Letter",
-                    data=create_docx(cl_text),
-                    file_name=f"Jonathan Chang Covering Letter - {job['company_name']}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
+            c1, c2 = st.columns(2)
+            with c1:
+                cv_text = job.get('augmented_cv_text', 'No CV generated.')
+                st.text_area("Tailored CV", cv_text, height=300)
+                st.download_button("Download CV", create_docx(cv_text), 
+                                   f"Jonathan Chang CV - {job['company_name']}.docx")
+            with c2:
+                cl_text = job.get('tailored_cover_letter', 'No Cover Letter generated.')
+                st.text_area("Cover Letter", cl_text, height=300)
+                st.download_button("Download Cover Letter", create_docx(cl_text), 
+                                   f"Jonathan Chang Covering Letter - {job['company_name']}.docx")

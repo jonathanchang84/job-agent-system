@@ -1,6 +1,5 @@
 streamlit
 supabase
-pandas
-python-docx
 google-genai
-python-dotenv
+python-docx
+pandas
