@@ -23,7 +23,7 @@ def run_pipeline():
     # Build Prompt
     prompt = f"CV: {master_cv}\n\nJobs: {json.dumps(jobs)}\n\nReturn JSON map of id: {{augmented_cv, cover_letter, pitch}}."
     
-    # Use 'gemini-1.5-flash' which is the standard stable alias
+    # Use 'gemini-1.5-flash' alias which is widely supported
     response = ai_client.models.generate_content(
         model='gemini-1.5-flash', 
         contents=prompt

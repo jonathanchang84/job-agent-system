@@ -9,10 +9,11 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 st.set_page_config(page_title="Executive Job Agent", layout="wide")
 
-# Sidebar Navigation & Batch Controls
+# Sidebar Navigation
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio("Go to", ["Dashboard", "Manage Master CV"])
 
+# Batch Controls
 st.sidebar.markdown("---")
 st.sidebar.subheader("Batch Controls")
 if st.sidebar.button("1. Trigger Job Search & Sync"):
@@ -41,7 +42,6 @@ elif menu == "Dashboard":
     df = pd.DataFrame(data) if data else pd.DataFrame()
     
     if not df.empty:
-        # Use key to maintain state during navigation
         event = st.dataframe(df, selection_mode="single-row", on_select="rerun", key="job_table")
         if event.selection.rows:
             job = df.iloc[event.selection.rows[0]]
