@@ -3,45 +3,47 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 from cv_manager import read_docx
-from google import genai
 
 # Setup
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-ai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="Executive Job Agent", layout="wide")
 
-def run_augmentation_logic(job_id, role_title, company_name):
-    """Internal function to process AI logic triggered by UI."""
-    profile = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
-    if not profile.data:
-        return None
-    
-    master_cv = profile.data[0]['master_cv_text']
-    prompt = f"Augment this CV: {master_cv} for {role_title} at {company_name}. Return JSON with 'augmented_cv', 'cover_letter', 'pitch'."
-    
-    response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-    return response.text # You would parse this as JSON
-
-# --- UI Sections ---
+# Sidebar Navigation
 menu = st.sidebar.radio("Navigation", ["Dashboard", "Manage Master CV"])
 
+# --- TAB: Manage Master CV ---
 if menu == "Manage Master CV":
-    # ... (Keep your existing CV Upload logic here)
-    pass
+    st.header("Manage Master CV")
+    uploaded_file = st.file_uploader("Upload your Master CV (.docx)", type=["docx"])
+    
+    if uploaded_file:
+        cv_text = read_docx(uploaded_file)
+        if st.button("Save to Database"):
+            supabase.table("user_profile").upsert({"id": 1, "master_cv_text": cv_text}).execute()
+            st.success("Master CV saved!")
+            
+    profile = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
+    if profile.data:
+        st.subheader("Stored CV Preview")
+        st.text_area("Content", profile.data[0]['master_cv_text'], height=200)
 
-else:
+# --- TAB: Dashboard ---
+elif menu == "Dashboard":
     st.title("💼 Executive Pipeline")
-    df = pd.DataFrame(supabase.table("job_tracker").select("*").execute().data)
     
-    # ... (Keep your table view logic here)
-    
-    if "selected_job" in st.session_state:
-        job = st.session_state.selected_job
-        
-        # ADD THIS BUTTON
-        if st.button("🚀 Generate Tailored Assets"):
-            with st.spinner("AI is crafting your application..."):
-                assets = run_augmentation_logic(job['id'], job['role_title'], job['company_name'])
-                # Logic to update database and st.rerun()
-                st.success("Assets generated!")
+    try:
+        response = supabase.table("job_tracker").select("*").execute()
+        df = pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error loading jobs: {e}")
+        df = pd.DataFrame()
+
+    if df.empty:
+        st.info("No jobs discovered yet.")
+    else:
+        # Standard display logic
+        st.dataframe(df[["company_name", "role_title", "status"]], use_container_width=True)
+        st.warning("Select a row or click a specific job to tailor assets.")
