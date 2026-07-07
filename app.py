@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 import os
-import sys  # Added to capture the exact running Python executable path
-import subprocess
 from supabase import create_client
 from cv_manager import read_docx
 from run_full_pipeline import run_pipeline
+
+# NATIVE IMPORT: Removes the need for subprocess entirely
+import search_engine as engine
 
 # Ensure page configuration is set first
 st.set_page_config(page_title="Job Application Agent", layout="wide", page_icon="🚀")
@@ -29,23 +30,25 @@ st.title("🚀 Job Application Agent")
 # ==========================================
 st.sidebar.header("Automation Engine")
 
-# Button 1: Pull New Jobs (Runs your search engine scraper script using sys.executable)
+# Button 1: Pull New Jobs (Runs natively via imported modules)
 if st.sidebar.button("🔍 1. Scrape & Pull New Jobs"):
     with st.spinner("Activating scraper network and Gemini search queries..."):
         try:
-            # FIX: Using sys.executable guarantees it uses the exact environment that has pandas installed
-            result = subprocess.run(
-                [sys.executable, "search_engine.py"], 
-                capture_output=True, 
-                text=True
-            )
-            if result.returncode == 0:
-                st.sidebar.success("Scraper executed successfully! Data refreshed.")
-                st.rerun()
+            st.sidebar.write("⚡ Consulting Gemini for keywords...")
+            target_queries = engine.generate_search_queries()
+            
+            st.sidebar.write(f"📡 Scrape active for: {', '.join(target_queries)}")
+            raw_listings_df = engine.execute_uk_job_search(target_queries)
+            
+            if not raw_listings_df.empty:
+                engine.save_matches_to_supabase(raw_listings_df)
+                st.sidebar.success(f"Successfully pulled and synced {len(raw_listings_df)} positions!")
             else:
-                st.sidebar.error(f"Scraper error:\n{result.stderr}")
+                st.sidebar.warning("No new unique matching listings found in the past 48 hours.")
+                
+            st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Failed to trigger scraper script: {e}")
+            st.sidebar.error(f"Scraper Engine stopped working: {e}")
 
 # Button 2: Batch Tailor Assets
 if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
@@ -69,19 +72,16 @@ if uploaded_file is not None:
     if st.sidebar.button("💾 Push Master CV to Database"):
         with st.spinner("Parsing and syncing profile data..."):
             try:
-                # Read text using your cv_manager utility
                 with open("temp_master_cv.docx", "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 
                 cv_text = read_docx("temp_master_cv.docx")
                 
-                # Push/Upsert into your 'user_profile' table at ID 1
                 payload = {"id": 1, "master_cv_text": cv_text}
                 supabase.table("user_profile").upsert(payload).execute()
                 
                 st.sidebar.success("Master CV pushed and synced successfully!")
                 
-                # Clean up temp file
                 if os.path.exists("temp_master_cv.docx"):
                     os.remove("temp_master_cv.docx")
             except Exception as e:
@@ -104,18 +104,15 @@ else:
     df = pd.DataFrame()
 
 if not df.empty:
-    # Ensure all required fallback columns exist in the DataFrame dynamically
     for col in ["company_name", "role_title", "job_title", "status", "source", "job_url", "job_description", "tailored_cv"]:
         if col not in df.columns:
             df[col] = None
 
-    # Merge job_title into role_title column if necessary
     if "job_title" in df.columns:
         df["role_title"] = df["role_title"].fillna(df["job_title"])
 
     display_columns = ["company_name", "role_title", "status", "source", "job_url"]
     
-    # Selection Mode tracking via Streamlit state
     event = st.dataframe(
         df[display_columns], 
         use_container_width=True,
@@ -123,7 +120,6 @@ if not df.empty:
         on_select="rerun"
     )
 
-    # Detailed Context Drilldown
     if event and hasattr(event, "selection") and event.selection.get("rows"):
         selected_row_index = event.selection["rows"][0]
         job = df.iloc[selected_row_index]
