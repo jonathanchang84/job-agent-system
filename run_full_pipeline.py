@@ -12,20 +12,28 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 ai_client = genai.Client(api_key=API_KEY)
 
 def run_pipeline():
+    # 1. Fetch Master CV
     profile = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
     master_cv = profile.data[0]['master_cv_text'] if profile.data else ""
     
+    # 2. Fetch jobs that need assets
     jobs = supabase.table("job_tracker").select("id, role_title, company_name").is_("augmented_cv_text", "null").execute().data
     if not jobs: return 0
 
+    # 3. Build Prompt
     prompt = f"CV: {master_cv}\n\nJobs: {json.dumps(jobs)}\n\nReturn JSON map of id: {{augmented_cv, cover_letter, pitch}}."
     
-    # Using the verified model name from your list
-    response = ai_client.models.generate_content(
-        model='models/gemini-2.0-flash', 
-        contents=prompt
-    )
+    # 4. Generate Content
+    try:
+        response = ai_client.models.generate_content(
+            model='models/gemini-2.0-flash', 
+            contents=prompt
+        )
+    except Exception as e:
+        print(f"API Error: {e}")
+        raise e
     
+    # 5. Parse and Update
     results = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
     
     for job_id, assets in results.items():
