@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import os
+import sys  # Added to capture the exact running Python executable path
+import subprocess
 from supabase import create_client
 from cv_manager import read_docx
 from run_full_pipeline import run_pipeline
-import subprocess
 
 # Ensure page configuration is set first
 st.set_page_config(page_title="Job Application Agent", layout="wide", page_icon="🚀")
@@ -28,12 +29,16 @@ st.title("🚀 Job Application Agent")
 # ==========================================
 st.sidebar.header("Automation Engine")
 
-# Button 1: Pull New Jobs (Runs your search engine scraper script)
+# Button 1: Pull New Jobs (Runs your search engine scraper script using sys.executable)
 if st.sidebar.button("🔍 1. Scrape & Pull New Jobs"):
     with st.spinner("Activating scraper network and Gemini search queries..."):
         try:
-            # Executes search_engine.py as a background subprocess
-            result = subprocess.run(["python", "search_engine.py"], capture_output=True, text=True)
+            # FIX: Using sys.executable guarantees it uses the exact environment that has pandas installed
+            result = subprocess.run(
+                [sys.executable, "search_engine.py"], 
+                capture_output=True, 
+                text=True
+            )
             if result.returncode == 0:
                 st.sidebar.success("Scraper executed successfully! Data refreshed.")
                 st.rerun()
@@ -65,7 +70,6 @@ if uploaded_file is not None:
         with st.spinner("Parsing and syncing profile data..."):
             try:
                 # Read text using your cv_manager utility
-                # Write to a temporary file so python-docx can process it
                 with open("temp_master_cv.docx", "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 
