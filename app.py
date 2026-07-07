@@ -4,149 +4,115 @@ import os
 from supabase import create_client
 from cv_manager import read_docx
 from run_full_pipeline import run_pipeline
-
-# NATIVE IMPORT: Removes the need for subprocess entirely
 import search_engine as engine
 
-# Ensure page configuration is set first
 st.set_page_config(page_title="Job Application Agent", layout="wide", page_icon="🚀")
 
-# Initialize Supabase
 @st.cache_resource
 def init_supabase():
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        st.error("Missing Supabase credentials in environment variables.")
-        return None
-    return create_client(url, key)
+    if url and key:
+        return create_client(url, key)
+    return None
 
 supabase = init_supabase()
 
 st.title("🚀 Job Application Agent")
 
-# ==========================================
-# SIDEBAR: AUTOMATION ENGINE
-# ==========================================
+# Sidebar Controls
 st.sidebar.header("Automation Engine")
-
-# Button 1: Pull New Jobs (Runs natively via imported modules)
 if st.sidebar.button("🔍 1. Scrape & Pull New Jobs"):
-    with st.spinner("Activating scraper network and Gemini search queries..."):
+    with st.spinner("Scraping listings..."):
         try:
-            st.sidebar.write("⚡ Consulting Gemini for keywords...")
-            target_queries = engine.generate_search_queries()
-            
-            st.sidebar.write(f"📡 Scrape active for: {', '.join(target_queries)}")
-            raw_listings_df = engine.execute_uk_job_search(target_queries)
-            
-            if not raw_listings_df.empty:
-                engine.save_matches_to_supabase(raw_listings_df)
-                st.sidebar.success(f"Successfully pulled and synced {len(raw_listings_df)} positions!")
-            else:
-                st.sidebar.warning("No new unique matching listings found in the past 48 hours.")
-                
+            queries = engine.generate_search_queries()
+            raw_df = engine.execute_uk_job_search(queries)
+            if not raw_df.empty:
+                engine.save_matches_to_supabase(raw_df)
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Scraper Engine stopped working: {e}")
+            st.sidebar.error(f"Error: {e}")
 
-# Button 2: Batch Tailor Assets
 if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
-    with st.spinner("AI is batch processing pipeline tasks..."):
+    with st.spinner("AI is optimizing CVs and Cover Letters..."):
         try:
             count = run_pipeline()
-            st.sidebar.success(f"Generated tailored assets for {count} jobs.")
-            st.rerun()  
+            st.sidebar.success(f"Optimized assets for {count} positions!")
+            st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Pipeline execution halted: {e}")
+            st.sidebar.error(f"Halted: {e}")
 
 st.sidebar.markdown("---")
-
-# ==========================================
-# SIDEBAR: PUSH / UPLOAD MASTER CV
-# ==========================================
 st.sidebar.header("Profile Administration")
 uploaded_file = st.sidebar.file_uploader("Upload Master CV (.docx)", type=["docx"])
+if uploaded_file and st.sidebar.button("💾 Push Master CV"):
+    with open("temp_master_cv.docx", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    cv_text = read_docx("temp_master_cv.docx")
+    supabase.table("user_profile").upsert({"id": 1, "master_cv_text": cv_text}).execute()
+    st.sidebar.success("Master CV Synced!")
+    st.rerun()
 
-if uploaded_file is not None:
-    if st.sidebar.button("💾 Push Master CV to Database"):
-        with st.spinner("Parsing and syncing profile data..."):
-            try:
-                with open("temp_master_cv.docx", "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                cv_text = read_docx("temp_master_cv.docx")
-                
-                payload = {"id": 1, "master_cv_text": cv_text}
-                supabase.table("user_profile").upsert(payload).execute()
-                
-                st.sidebar.success("Master CV pushed and synced successfully!")
-                
-                if os.path.exists("temp_master_cv.docx"):
-                    os.remove("temp_master_cv.docx")
-            except Exception as e:
-                st.sidebar.error(f"Failed to push CV: {e}")
-
-# ==========================================
-# MAIN DASHBOARD VISUALS
-# ==========================================
+# Dashboard View
 st.header("📋 Application Dashboard")
 
 if supabase:
     try:
         response = supabase.table("job_tracker").select("*").execute()
-        data = response.data if response.data else []
-        df = pd.DataFrame(data)
-    except Exception as e:
-        st.error(f"Failed to fetch data from Supabase: {e}")
+        df = pd.DataFrame(response.data if response.data else [])
+    except:
         df = pd.DataFrame()
 else:
     df = pd.DataFrame()
 
 if not df.empty:
-    for col in ["company_name", "role_title", "job_title", "status", "source", "job_url", "job_description", "tailored_cv"]:
+    # Ensure fallback safety columns
+    for col in ["company_name", "role_title", "status", "source", "job_url", "job_description", "tailored_cv", "tailored_cover_letter"]:
         if col not in df.columns:
             df[col] = None
 
-    if "job_title" in df.columns:
-        df["role_title"] = df["role_title"].fillna(df["job_title"])
-
-    display_columns = ["company_name", "role_title", "status", "source", "job_url"]
-    
-    event = st.dataframe(
-        df[display_columns], 
-        use_container_width=True,
-        selection_mode="single-row", 
-        on_select="rerun"
-    )
+    display_cols = ["company_name", "role_title", "status", "source", "job_url"]
+    event = st.dataframe(df[display_cols], use_container_width=True, selection_mode="single-row", on_select="rerun")
 
     if event and hasattr(event, "selection") and event.selection.get("rows"):
-        selected_row_index = event.selection["rows"][0]
-        job = df.iloc[selected_row_index]
+        selected_index = event.selection["rows"][0]
+        job = df.iloc[selected_index]
         
         st.markdown("---")
-        st.subheader(f"🔍 Deep-Dive Details for: {job.get('company_name') or 'Unknown Enterprise'}")
+        st.subheader(f"🔍 Optimization Suite: {job.get('company_name')}")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"**Role:** {job.get('role_title') or 'N/A'}")
-            st.write(f"**Current Pipeline Status:** `{job.get('status') or 'N/A'}`")
-        with col2:
-            st.write(f"**Platform Source:** {job.get('source') or 'N/A'}")
-            if job.get('job_url'):
-                st.write(f"**Job URL:** [View Original Posting]({job.get('job_url')})")
-                
-        desc_col, ai_col = st.columns(2)
-        with desc_col:
-            st.markdown("### 📝 Target Job Description")
-            st.info(job.get('job_description') or "No description saved.")
+        # Split screen: Left = Job Spec input, Right = AI Output
+        left_col, right_col = st.columns(2)
+        
+        with left_col:
+            st.markdown("### 📝 Target Job Description Spec")
+            # Turned this into an editable text box so you can fix blank web scrapes manually
+            updated_desc = st.text_area(
+                "If this is empty or missing, paste the job advert specs directly below:", 
+                value=job.get('job_description') or '', 
+                height=350
+            )
+            if updated_desc != job.get('job_description'):
+                if st.button("💾 Save Pasted Job Spec"):
+                    supabase.table("job_tracker").update({"job_description": updated_desc}).eq("id", job["id"]).execute()
+                    st.success("Spec saved! Ready to tailor assets.")
+                    st.rerun()
+                    
+        with right_col:
+            st.markdown("### ✨ AI Generation Output")
+            # Tab structure to clearly organize your assets
+            cv_tab, cl_tab = st.tabs(["📄 Optimized CV", "✉️ Custom Cover Letter"])
             
-        with ai_col:
-            st.markdown("### ✨ Tailored AI CV Output")
-            tailored_output = job.get('tailored_cv')
-            if tailored_output:
-                st.text_area("Generated Document Content", value=tailored_output, height=400)
-            else:
-                st.warning("No custom assets generated for this target position yet. Hit 'Batch Update Missing Assets' on the sidebar to build it.")
+            with cv_tab:
+                if job.get('tailored_cv'):
+                    st.text_area("Your Tailored Target CV Content", value=job.get('tailored_cv'), height=300)
+                else:
+                    st.warning("No CV built yet. Make sure a job description spec is saved on the left, then hit button 2.")
+                    
+            with cl_tab:
+                if job.get('tailored_cover_letter'):
+                    st.text_area("Your Tailored Cover Letter Content", value=job.get('tailored_cover_letter'), height=300)
+                else:
+                    st.warning("No Cover Letter built yet. Make sure a job description spec is saved on the left, then hit button 2.")
 else:
-    st.info("The application pipeline is currently empty. Use the sidebar buttons to pull positions or upload a Master CV.")
+    st.info("Your application pipeline is empty.")
