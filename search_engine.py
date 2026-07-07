@@ -52,7 +52,7 @@ def generate_search_queries():
         return ["Director of Product Banking", "Head of Product Wealth Management", "Product Lead Real Estate Finance"]
 
 def execute_uk_job_search(target_titles):
-    """Scrapes LinkedIn, Indeed, and Reed individually for recent openings so one error won't stop the search."""
+    """Scrapes LinkedIn, Indeed, and Reed individually and tags them with their source platform."""
     found_jobs = []
     platforms = ["linkedin", "indeed", "reed"]
     
@@ -69,6 +69,8 @@ def execute_uk_job_search(target_titles):
                     country_tier="uk"
                 )
                 if not jobs.empty:
+                    # Explicitly tag the source platform inside the dataframe
+                    jobs['source_platform'] = platform.upper()
                     found_jobs.append(jobs)
                     print(f"-> Found {len(jobs)} matches on {platform.upper()}!")
             except Exception as e:
@@ -79,7 +81,7 @@ def execute_uk_job_search(target_titles):
     return pd.DataFrame()
 
 def save_matches_to_supabase(df):
-    """Pushes discovered leads safely into your tracker while avoiding duplicates and API key drops."""
+    """Pushes discovered leads safely into your tracker while avoiding duplicates."""
     if not supabase:
         print("Supabase client is not connected. Skipping database insertion.")
         return
@@ -98,14 +100,14 @@ def save_matches_to_supabase(df):
                     "company_name": row.get('company', 'Unknown Enterprise'),
                     "role_title": row.get('title', 'Product Position'),
                     "job_url": url,
-                    "status": "Discovered"
+                    "status": "Discovered",
+                    "source": row.get('source_platform', 'LINKEDIN')  # Adds the source platform field
                 }
                 supabase.table("job_tracker").insert(payload).execute()
                 count += 1
         except Exception as e:
             print(f"Could not check or save row to Supabase: {e}")
-            print("Tip: If you see an API Key error, try using your Supabase 'service_role' key instead of 'anon'.")
-            break # Break out early so it doesn't spam errors
+            break
             
     if count > 0:
         print(f"Successfully processed and stored {count} pristine new opportunities in Supabase.")
