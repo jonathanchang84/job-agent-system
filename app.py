@@ -16,7 +16,7 @@ menu = st.sidebar.radio("Go to", ["Dashboard", "Manage Master CV"])
 st.sidebar.markdown("---")
 st.sidebar.subheader("Batch Controls")
 if st.sidebar.button("1. Trigger Job Search & Sync"):
-    st.sidebar.info("Search triggered.")
+    st.sidebar.info("Search logic triggered.")
 
 if st.sidebar.button("2. Batch Update Missing Assets"):
     with st.spinner("AI is batch processing..."):
@@ -26,7 +26,7 @@ if st.sidebar.button("2. Batch Update Missing Assets"):
         except Exception as e:
             st.sidebar.error(f"Error: {e}")
 
-# Main View
+# Main View Container
 if menu == "Manage Master CV":
     st.header("Manage Master CV")
     uploaded_file = st.file_uploader("Upload CV (.docx)", type=["docx"])
@@ -41,7 +41,8 @@ elif menu == "Dashboard":
     df = pd.DataFrame(data) if data else pd.DataFrame()
     
     if not df.empty:
-        event = st.dataframe(df, selection_mode="single-row", on_select="rerun")
+        # Use key to maintain state during navigation
+        event = st.dataframe(df, selection_mode="single-row", on_select="rerun", key="job_table")
         if event.selection.rows:
             job = df.iloc[event.selection.rows[0]]
             st.write(f"### {job['role_title']} at {job['company_name']}")
