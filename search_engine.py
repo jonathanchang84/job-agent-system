@@ -1,20 +1,28 @@
 import os
 import json
 import pandas as pd
-from dotenv import load_dotenv
 from google import genai
 from jobspy import scrape_jobs
 from supabase import create_client
 
-load_dotenv(override=True)
+# Try loading dotenv safely; if it's missing or in a stream environment, look directly at system env vars
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass
 
+# Client Configurations
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 ai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 try:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
+    if SUPABASE_URL and SUPABASE_KEY:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    else:
+        supabase = None
+except Exception:
     supabase = None
 
 CV_PROFILE = """
