@@ -5,4 +5,4 @@ python-docx
 pandas
 docxtpl
 python-dotenv
-jobspy
+python-jobspy

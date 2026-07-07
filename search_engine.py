@@ -5,17 +5,23 @@ from google import genai
 from jobspy import scrape_jobs
 from supabase import create_client
 
-# Try loading dotenv safely; if it's missing or in a stream environment, look directly at system env vars
+# Safely look for dotenv if it's there; if not, ignore it on Streamlit Cloud
 try:
     from dotenv import load_dotenv
     load_dotenv(override=True)
 except ImportError:
     pass
 
-# Client Configurations
+# Client Configurations (Pulls directly from Streamlit Secrets or Environment)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-ai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Initialize Gemini client safely
+if GEMINI_API_KEY:
+    ai_client = genai.Client(api_key=GEMINI_API_KEY)
+else:
+    ai_client = genai.Client()  # Falls back to standard client routing
 
 try:
     if SUPABASE_URL and SUPABASE_KEY:
