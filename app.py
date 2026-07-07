@@ -16,7 +16,6 @@ st.set_page_config(
 )
 
 # Initialize Supabase Client
-# (Checks local environment first via os.getenv, then falls back to Streamlit Secrets on the Cloud)
 SUPABASE_URL = os.getenv("SUPABASE_URL") or (st.secrets.get("SUPABASE_URL") if "SUPABASE_URL" in st.secrets else None)
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or (st.secrets.get("SUPABASE_KEY") if "SUPABASE_KEY" in st.secrets else None)
 
@@ -92,7 +91,7 @@ else:
 
     # Filter by Status
     if "status" in df.columns:
-        statuses = ["All"] + sorted(df["status"].dropna().unique().tolist())
+        statuses = ["All"] + sorted(df["status"].unique().tolist())
         selected_status = st.sidebar.selectbox("Application Status", statuses)
         if selected_status != "All":
             df = df[df["status"] == selected_status]
@@ -100,7 +99,7 @@ else:
     # --- Main Data View ---
     st.subheader("Discovered Leads")
     
-    # Clean up dataframe view for presentation and include the 'source' column
+    # Clean up dataframe view for presentation and include the columns
     display_cols = ["id", "company_name", "role_title", "source", "status", "job_url"]
     actual_cols = [col for col in display_cols if col in df.columns]
     
