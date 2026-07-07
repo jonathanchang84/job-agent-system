@@ -1,5 +1,6 @@
-python-dotenv
-pandas
+streamlit
 supabase
+pandas
+python-docx
 google-genai
-jobspy
+python-dotenv
