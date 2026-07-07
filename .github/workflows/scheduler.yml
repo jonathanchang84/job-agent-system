@@ -1,0 +1,20 @@
+name: Daily Job Pipeline
+on:
+  schedule:
+    - cron: '0 9 * * *' # 9:00 UTC is 10:00 BST
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with: {python-version: '3.9'}
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python run_full_pipeline.py
