@@ -18,37 +18,39 @@ def init_supabase():
 
 supabase = init_supabase()
 
-st.title("🚀 Autonomous Job Application Agent")
+st.title("🚀 Job Application Agent")
 
 # ==========================================
-# SIDEBAR CONTROLS: THE AUTONOMOUS SWITCH
+# SIDEBAR CONTROLS: SEPARATED WORKFLOW
 # ==========================================
-st.sidebar.header("Agent Execution")
+st.sidebar.header("Automation Engine")
 
-if st.sidebar.button("🔥 Run Fully Automated Pipeline"):
-    status_box = st.sidebar.empty()
-    
-    with st.spinner("Executing pipeline context..."):
+# Button 1: Deep Scrape ONLY (No Gemini Asset Calls)
+if st.sidebar.button("🔍 1. Scrape & Auto-Pull Full Specs"):
+    with st.spinner("Scraping listings & fetching complete job specs..."):
         try:
-            status_box.info("⚡ Generating search targets using Gemini...")
             queries = engine.generate_search_queries()
-            
-            status_box.info(f"📡 Scraping listings and reading full text details for: {', '.join(queries)}")
+            # This calls the updated jobspy method with description fetching active!
             raw_df = engine.execute_uk_job_search(queries)
             
             if not raw_df.empty:
-                status_box.info(f"💾 Securing {len(raw_df)} listings inside database...")
                 engine.save_matches_to_supabase(raw_df)
-                
-                status_box.info("🤖 Chaining Engine: Running AI CV and Cover Letter optimization...")
-                optimized_count = run_pipeline()
-                st.sidebar.success(f"Complete! Added listings and optimized {optimized_count} asset profiles.")
+                st.sidebar.success(f"Successfully pulled {len(raw_df)} jobs with full specs!")
             else:
-                st.sidebar.warning("No new job openings found over the last window interval.")
-            
+                st.sidebar.warning("No new matching jobs found.")
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Pipeline error: {e}")
+            st.sidebar.error(f"Scraper error: {e}")
+
+# Button 2: Manual AI Batch Processing (Run on your own terms)
+if st.sidebar.button("🤖 2. Batch Update Missing Assets"):
+    with st.spinner("AI is optimizing CVs and Cover Letters..."):
+        try:
+            count = run_pipeline()
+            st.sidebar.success(f"Optimized assets for {count} positions!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Halted: {e}")
 
 st.sidebar.markdown("---")
 st.sidebar.header("Profile Administration")
@@ -94,12 +96,17 @@ if not df.empty:
         
         with left_col:
             st.markdown("### 📝 Target Job Description Spec")
-            st.text_area(
+            # Editable just in case, but will now load scraped data by default
+            updated_desc = st.text_area(
                 "Scraped Job Spec Context", 
-                value=job.get('job_description') or 'No description captured.', 
-                height=350,
-                disabled=True
+                value=job.get('job_description') or '', 
+                height=350
             )
+            if updated_desc != job.get('job_description'):
+                if st.button("💾 Save Pasted Job Spec"):
+                    supabase.table("job_tracker").update({"job_description": updated_desc}).eq("id", job["id"]).execute()
+                    st.success("Spec saved manually!")
+                    st.rerun()
                     
         with right_col:
             st.markdown("### ✨ AI Generation Output")
@@ -109,12 +116,12 @@ if not df.empty:
                 if job.get('tailored_cv'):
                     st.text_area("Your Tailored Target CV Content", value=job.get('tailored_cv'), height=300)
                 else:
-                    st.warning("Assets are currently pending pipeline calculation.")
+                    st.warning("No CV built yet. Make sure a job description spec is saved on the left, then hit button 2.")
                     
             with cl_tab:
                 if job.get('tailored_cover_letter'):
                     st.text_area("Your Tailored Cover Letter Content", value=job.get('tailored_cover_letter'), height=300)
                 else:
-                    st.warning("Assets are currently pending pipeline calculation.")
+                    st.warning("No Cover Letter built yet. Make sure a job description spec is saved on the left, then hit button 2.")
 else:
     st.info("Your pipeline data core is currently empty.")
