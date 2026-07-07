@@ -88,8 +88,8 @@ def save_matches_to_supabase(df):
             continue
             
         try:
-            # Avoid inserting duplicate application entries
-            duplicate_check = supabase.table("job_tracker").select("id").eq(\"job_url\", url).execute()
+            # FIX: Removed the errant backslash character from the string matching criteria
+            duplicate_check = supabase.table("job_tracker").select("id").eq("job_url", url).execute()
             
             if not duplicate_check.data:
                 payload = {
