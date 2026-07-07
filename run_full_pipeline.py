@@ -4,11 +4,11 @@ from google import genai
 from google.genai.errors import APIError
 from supabase import create_client
 
-# 1. INITIALIZE CLIENTS
+# Initialize clients Safely
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-ai_client = genai.Client()  # Picks up GEMINI_API_KEY naturally from environment
+ai_client = genai.Client()
 
 def generate_asset_with_retry(prompt, model_name="gemini-2.5-flash", max_retries=3):
     """Wraps the Gemini API call to catch 429 rate limit errors and back off."""
@@ -29,23 +29,22 @@ def generate_asset_with_retry(prompt, model_name="gemini-2.5-flash", max_retries
     raise Exception("❌ Failed to generate asset after maximum retries.")
 
 def run_pipeline():
-    """
-    Main loop function that processes jobs where tailored assets are missing.
-    """
-    # Fetch rows from Supabase where tailormade assets haven't been completed yet
+    """Main loop function that processes jobs where tailored assets are missing."""
+    # Fetch entries where tailored_cv is currently null
     response = supabase.table("job_tracker").select("*").is_("tailored_cv", "null").execute()
     jobs_to_update = response.data if response.data else []
     
     success_count = 0
     
-    # 1. Pull down the Master CV to provide context to the prompt
+    # Pull down the Master CV text for asset priming
     profile_resp = supabase.table("user_profile").select("master_cv_text").eq("id", 1).execute()
     master_cv = profile_resp.data[0]['master_cv_text'] if profile_resp.data else ""
 
     for job in jobs_to_update:
-        job_description = job.get('job_description', 'No description provided.')
-        role_title = job.get('role_title', job.get('job_title', 'Product Manager'))
-        company = job.get('company_name', 'Target Company')
+        job_description = job.get('job_description') or 'No description provided.'
+        # Unified tracking fallback check for variable naming types
+        role_title = job.get('role_title') or job.get('job_title') or 'Product Position'
+        company = job.get('company_name') or 'Target Company'
 
         prompt = f"""
         You are an elite executive career coach. Tailor the following Master CV text perfectly to match the provided job description.
@@ -59,21 +58,16 @@ def run_pipeline():
         """
         
         try:
-            # Execute with built-in retry logic
             tailored_cv_text = generate_asset_with_retry(prompt)
             
-            # (Optional: Insert docxtpl logic here if writing back to disk templates)
-            
-            # Update Supabase database record
+            # Update data entry safely
             supabase.table("job_tracker").update({
                 "tailored_cv": tailored_cv_text,
                 "status": "Ready to Apply"
             }).eq("id", job["id"]).execute()
             
             success_count += 1
-            
-            # Cooldown execution pause to protect your tier quota
-            time.sleep(1.5) 
+            time.sleep(1.5) # Anti-rate-throttling delay
             
         except Exception as e:
             print(f"❌ Error processing job ID {job.get('id')}: {e}")
